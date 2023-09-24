@@ -9,6 +9,12 @@ fullPhenotypeLog <- PhenotypeLibrary::getPhenotypeLog() |>
     negate = TRUE
   ))
 
+cohortsThatShouldBeRemovedBecauseTheySeemToCauseProblems <- c(23, 344)
+cohortsThatAreDuplicatesAndSoWontAddValue <- c()
+
+fullPhenotypeLog <- fullPhenotypeLog |> 
+  dplyr::filter(!cohortId %in% c(cohortsThatShouldBeRemovedBecauseTheySeemToCauseProblems,
+                                 cohortsThatAreDuplicatesAndSoWontAddValue))
 
 # Note: HowOften has three types of analysis
 ## Analysis 1: Use all cohorts in PL that met some criteria as outcome, and use a baseCohort as Target
@@ -48,6 +54,12 @@ subsetOfCohorts$foundInLibraryOutcomeLegend <- fullPhenotypeLog |>
   dplyr::select(cohortId) |>
   dplyr::mutate(reasonLegend = 1)
 
+# All service utilization cohorts.
+subsetOfCohorts$foundInVisit <- fullPhenotypeLog |>
+  dplyr::filter(stringr::str_detect(string = toupper(hashTag), pattern = "#VISIT")) |>
+  dplyr::select(cohortId) |>
+  dplyr::mutate(reasonVisit = 1) # debatable
+
 # All cohorts that were submitted to the OHDSI PhenotypeLibrary on or after August 1st 2023
 subsetOfCohorts$recentSubmission <- fullPhenotypeLog |>
   dplyr::filter(createdDate > as.Date('2023-08-01')) |>
@@ -82,6 +94,7 @@ subsetOfCohorts$howOften <- fullPhenotypeLog |>
 allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
   dplyr::select(cohortId) |>
   dplyr::distinct() |>
+  dplyr::filter(!cohortId %in% c(23)) |> 
   dplyr::left_join(subsetOfCohorts$baseCohort) |>
   dplyr::left_join(subsetOfCohorts$acceptedCohorts) |>
   dplyr::left_join(subsetOfCohorts$foundInLibraryOutcomeDme) |>
@@ -90,6 +103,7 @@ allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
   dplyr::left_join(subsetOfCohorts$recentSubmission) |>
   dplyr::left_join(subsetOfCohorts$libraryIndicationCohorts) |>
   dplyr::left_join(subsetOfCohorts$howOften) |>
+  dplyr::left_join(subsetOfCohorts$foundInVisit) |> 
   tidyr::replace_na(
     replace = list(
       reasonBaseCohort = 0,
@@ -99,7 +113,8 @@ allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
       reasonLegend = 0,
       reasonRecentlyPosted = 0,
       reasonAnalysis3Indication = 0,
-      reasonHowOftenAnalysis3 = 0
+      reasonHowOftenAnalysis3 = 0,
+      reasonVisit = 0
     )
   )
 
@@ -175,9 +190,18 @@ allCohorts |>
   dplyr::group_by(cleanWindowAssigned, eventCohorts) |>
   dplyr::summarise(n = dplyr::n())
 
+### Heuristic 2: event cohorts we dont want to model as reoccurrence events. assign 9999  ----
+cohortsWithVeryLongCleanWindow <- c(219, 980, 999, 1075)
+
+
+### Heuristic 3: utilization cohorts. assign 30 days  ----
+cohortsWithVeryLongCleanWindow <- c(23, 24, 707)
+
+
 # rest is manual assignment
 needManualAssignment <- allCohorts |>
   dplyr::filter(cleanWindowAssigned == 0) |>
+  dplyr::filter(reasonBaseCohort == 0) |> 
   dplyr::inner_join(
     fullPhenotypeLog |>
       dplyr::select(
