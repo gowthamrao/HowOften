@@ -222,5 +222,6 @@ needManualAssignment <- allCohorts |>
                   cohortName) |>
   dplyr::arrange(cohortId)
 
-readr::write_excel_csv(x = needManualAssignment,
+readr::write_excel_csv(x = needManualAssignment |> 
+                         dplyr::arrange(cohortName),
                        file = "needManualAssignment.csv", na = "")
