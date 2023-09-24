@@ -207,6 +207,8 @@ needManualAssignment <- allCohorts |>
       dplyr::select(
         cohortId,
         cohortName,
+        cohortNameAtlas,
+        hashTag,
         exitPersistenceWindow,
         hasWashoutInText,
         useOfObservationPeriodInclusionRule,
