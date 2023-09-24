@@ -292,13 +292,61 @@ outcomes <- allCohorts |>
                 cohortDefinitionName = cohortName) |> 
   SqlRender::camelCaseToSnakeCaseNames()
 
-writexl::write_xlsx(list(targets = targets, outcomes = outcomes), "analysis1.xlsx")
+writexl::write_xlsx(list(targets = targets, outcomes = outcomes), "analysis_specifications/analysis1.xlsx")
 
 ## Analysis 2 ----
+analysis2InputSpecifications <- readxl::read_excel("analysis_specifications/analysis2InputSpecifications.xlsx")
 
+analysis2CombinationsUnique <- analysis2InputSpecifications |> 
+  dplyr::select(from, 
+                group) |> 
+  dplyr::distinct() |> 
+  dplyr::arrange(from, 
+                 group) |> 
+  dplyr::group_by(from) |> 
+  dplyr::mutate(id = dplyr::row_number()) |> 
+  dplyr::ungroup()
+
+for (i in (1:nrow(analysis2CombinationsUnique))) {
+  combi <- analysis2CombinationsUnique[i,]
+  targets <- allCohorts |> 
+    dplyr::filter(
+      cohortId %in% c(analysis2InputSpecifications |> 
+                        dplyr::inner_join(combi) |> 
+                        dplyr::pull(tId))
+    )  |>
+    dplyr::inner_join(fullPhenotypeLog) |> 
+    dplyr::select(cohortId,
+                  cohortName) |> 
+    dplyr::arrange(cohortId) |> 
+    dplyr::rename(cohortDefinitionId = cohortId,
+                  cohortDefinitionName = cohortName) |> 
+    SqlRender::camelCaseToSnakeCaseNames()
+  
+  outcomes <- allCohorts |> 
+    dplyr::filter(
+      cohortId %in% c(analysis2InputSpecifications |> 
+                        dplyr::inner_join(combi) |> 
+                        dplyr::pull(oId))
+    )  |>
+    dplyr::inner_join(fullPhenotypeLog) |> 
+    dplyr::select(cohortId,
+                  cohortName) |> 
+    dplyr::arrange(cohortId) |> 
+    dplyr::rename(cohortDefinitionId = cohortId,
+                  cohortDefinitionName = cohortName) |> 
+    SqlRender::camelCaseToSnakeCaseNames()
+  
+  writexl::write_xlsx(list(targets = targets, outcomes = outcomes), paste0("analysis_specifications/analysis2_",
+                                                                           combi$from,
+                                                                           "_",
+                                                                           combi$id,
+                                                                           ".xlsx"))
+    
+}
 
 ## Analysis 3 ----
-target <- allCohorts |>
+targets <- allCohorts |>
   dplyr::filter(
     cohortId %in% c(
       subsetOfCohorts$howOften$cohortId,
@@ -314,5 +362,5 @@ outcome <- allCohorts |>
       subsetOfCohorts$foundInLibraryOutcomeLegend$cohortId
     )
   )
-writexl::write_xlsx(list(targets = targets, outcomes = outcomes), "analysis3.xlsx")
+writexl::write_xlsx(list(targets = targets, outcomes = outcomes), "analysis_specifications/analysis3.xlsx")
 
