@@ -314,7 +314,7 @@ for (i in (1:nrow(analysis2CombinationsUnique))) {
       cohortId %in% c(analysis2InputSpecifications |> 
                         dplyr::inner_join(combi) |> 
                         dplyr::pull(tId))
-    )  |>
+    ) |>
     dplyr::inner_join(fullPhenotypeLog) |> 
     dplyr::select(cohortId,
                   cohortName) |> 
@@ -328,10 +328,11 @@ for (i in (1:nrow(analysis2CombinationsUnique))) {
       cohortId %in% c(analysis2InputSpecifications |> 
                         dplyr::inner_join(combi) |> 
                         dplyr::pull(oId))
-    )  |>
+    ) |>
     dplyr::inner_join(fullPhenotypeLog) |> 
     dplyr::select(cohortId,
-                  cohortName) |> 
+                  cohortName,
+                  cleanWindow) |> 
     dplyr::arrange(cohortId) |> 
     dplyr::rename(cohortDefinitionId = cohortId,
                   cohortDefinitionName = cohortName) |> 
@@ -352,15 +353,31 @@ targets <- allCohorts |>
       subsetOfCohorts$howOften$cohortId,
       subsetOfCohorts$libraryIndicationCohorts$cohortId
     )
-  )
+  ) |>
+  dplyr::inner_join(fullPhenotypeLog) |> 
+  dplyr::select(cohortId,
+                cohortName) |> 
+  dplyr::arrange(cohortId) |> 
+  dplyr::rename(cohortDefinitionId = cohortId,
+                cohortDefinitionName = cohortName) |> 
+  SqlRender::camelCaseToSnakeCaseNames()
 
-outcome <- allCohorts |> 
+outcomes <- allCohorts |> 
   dplyr::filter(
     cohortId %in% c(
       subsetOfCohorts$foundInLibraryOutcomeDme$cohortId,
       subsetOfCohorts$foundInLibraryOutcomeAesi$cohortId,
       subsetOfCohorts$foundInLibraryOutcomeLegend$cohortId
     )
-  )
+  ) |>
+  dplyr::inner_join(fullPhenotypeLog) |> 
+  dplyr::select(cohortId,
+                cohortName, 
+                cleanWindow) |> 
+  dplyr::arrange(cohortId) |> 
+  dplyr::rename(cohortDefinitionId = cohortId,
+                cohortDefinitionName = cohortName) |> 
+  SqlRender::camelCaseToSnakeCaseNames()
+
 writexl::write_xlsx(list(targets = targets, outcomes = outcomes), "analysis_specifications/analysis3.xlsx")
 
