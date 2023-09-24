@@ -116,7 +116,6 @@ subsetOfCohorts$jillHardinCohorts <- fullPhenotypeLog |>
 allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
   dplyr::select(cohortId) |>
   dplyr::distinct() |>
-  dplyr::filter(!cohortId %in% c(23)) |> 
   dplyr::left_join(subsetOfCohorts$baseCohort) |>
   dplyr::left_join(subsetOfCohorts$acceptedCohorts) |>
   dplyr::left_join(subsetOfCohorts$foundInLibraryOutcomeDme) |>
@@ -251,7 +250,7 @@ allCohorts <-
     allCohorts |>
       dplyr::filter(!cohortId %in% c(cleanWindowToAssign$cohortId)),
     allCohorts |>
-      dplyr::select(-cleanWindow, cleanWindowAssigned) |>
+      dplyr::select(-cleanWindow, -cleanWindowAssigned) |>
       dplyr::inner_join(cleanWindowToAssign)
   )
 
