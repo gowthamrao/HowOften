@@ -210,27 +210,6 @@ allCohorts |>
   dplyr::group_by(cleanWindowAssigned, eventCohort) |>
   dplyr::summarise(n = dplyr::n())
 
-fullPhenotypeLog |> 
-  dplyr::inner_join(allCohorts |> 
-                      dplyr::filter(cleanWindowAssigned == 0,
-                                    eventCohort == 1) |> 
-                      dplyr::select(cohortId)) |> 
-  dplyr::select(cohortId,
-                cohortName,
-                hashTag,
-                contributors,
-                createdDate,
-                isReferenceCohort,
-                collapseSettingsType,
-                collapseEraPad,
-                exitStrategy,
-                exitDateOffSetField,
-                exitDateOffSet,
-                hasWashoutInText,
-                exitPersistenceWindow,
-                exitSurveillanceWindow) |> 
-  readr::write_csv(file = "toAssignCleanWindow.csv", na = "")
-
 ### Heuristic based: assign clean window  ----
 ### (Decided by Azza and Gowtham)
 cleanWindow <- c()
