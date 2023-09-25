@@ -1,4 +1,4 @@
-remotes::install_github(repo = "OHDSI/PhenotypeLibrary", ref = "v3.23.0")
+remotes::install_github(repo = "OHDSI/PhenotypeLibrary", ref = "v3.24.0")
 
 
 # Step 1: get all cohort definition in OHDSI PhenotypeLibrary ----
@@ -11,6 +11,9 @@ fullPhenotypeLog <- PhenotypeLibrary::getPhenotypeLog() |>
 
 # any overides
 cohortsThatShouldBeRemovedBecauseTheySeemToCauseProblems <- c(23, 344)
+cohortsThatAreInteresting <- c(30, 33, 43, 61, 142, 235, 236, 240, 248, 251, 253, 329, 334, 372, 373, 375,
+                               383, 389, 394, 395, 401, 404, 405, 411,
+                               702, 703, 74, 705, 706, 710, 712, 715, 716, 717)
 cohortsThatAreDuplicates <- c()
 cohortsThatWontAddValue <- c()
 
@@ -111,6 +114,10 @@ subsetOfCohorts$jillHardinCohorts <- fullPhenotypeLog |>
   dplyr::select(cohortId) |>
   dplyr::mutate(reasonJillHardin = 1)
 
+subsetOfCohorts$thatAreInteresting <- fullPhenotypeLog |> 
+  dplyr::filter(cohortId %in% c(cohortsThatAreInteresting)) |>
+  dplyr::select(cohortId) |>
+  dplyr::mutate(reasonIsInteresting = 1)
 ## combine
 
 allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
@@ -127,6 +134,7 @@ allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
   dplyr::left_join(subsetOfCohorts$foundInVisit) |> 
   dplyr::left_join(subsetOfCohorts$foundInSymptoms) |> 
   dplyr::left_join(subsetOfCohorts$jillHardinCohorts) |> 
+  dplyr::left_join(subsetOfCohorts$thatAreInteresting) |> 
   tidyr::replace_na(
     replace = list(
       reasonBaseCohort = 0,
@@ -139,36 +147,56 @@ allCohorts <- dplyr::bind_rows(subsetOfCohorts) |>
       reasonHowOftenAnalysis3 = 0,
       reasonVisit = 0,
       reasonSymptoms = 0,
-      reasonJillHardin = 0
+      reasonJillHardin = 0,
+      reasonIsInteresting = 0
     )
   ) |> 
   dplyr::inner_join(
     fullPhenotypeLog |> 
       dplyr::select(cohortId,
                     cohortName,
-                    eventCohort)
-  )
+                    eventCohort,
+                    exitDateOffSet,
+                    exitPersistenceWindow,
+                    collapseEraPad)
+  ) |> 
+  dplyr::relocate(cohortId,
+                  cohortName,
+                  eventCohort,
+                  exitDateOffSet,
+                  exitPersistenceWindow,
+                  collapseEraPad)
 
 
 # Step 3: Assign clean window ----
 ## All cohorts get a default clean window ----
 allCohorts <- allCohorts |>
-  dplyr::mutate(cleanWindow = 9999,
-                cleanWindowAssigned = 0) 
+  dplyr::mutate(cleanWindow = 0,
+                cleanWindowAssigned = 0,
+                cleanWindowRule = "") 
+
 
 ## Only event cohorts need custom clean window. ----
-### We are using a combination of rule and heuristic to assign clean window.
+## So we will assume that cleanWindowAssigned = 1 for non event cohorts
 allCohorts <- allCohorts|>
   dplyr::mutate(
     cleanWindowAssigned = dplyr::if_else(
       condition = !as.logical(eventCohort),
       true = 1,
       false = cleanWindowAssigned
+    ),
+    cleanWindowRule = dplyr::if_else(
+      condition = !as.logical(eventCohort),
+      true = "Not an event cohort",
+      false = cleanWindowRule
     )
   )
 allCohorts |>
-  dplyr::group_by(cleanWindowAssigned, eventCohort) |>
+  dplyr::group_by(cleanWindowRule, cleanWindowAssigned, eventCohort) |>
   dplyr::summarise(n = dplyr::n())
+
+
+### We are using a combination of rule and heuristic to assign clean window.
 
 ### Rule based: use collapseEraPad  ----
 ### explore the distribution of collapseEraPad among event cohorts
@@ -182,43 +210,74 @@ allCohorts |>
 
 # Choice: If collapseEraPad >= 7, then we will use collapseEraPad
 allCohorts <- allCohorts |>
-  dplyr::inner_join(fullPhenotypeLog |>
-                      dplyr::select(cohortId,
-                                    collapseEraPad)) |>
   dplyr::mutate(
     cleanWindow = dplyr::if_else(
-      condition = (eventCohort == 1) &
-        (cleanWindowAssigned == 0) & (collapseEraPad > 7),
+      condition = (cleanWindowAssigned == 0) & (collapseEraPad > 7),
       true = collapseEraPad,
       false = cleanWindow
     ),
-    cleanWindowCollapseEraPad = dplyr::if_else(
+    cleanWindowRule = dplyr::if_else(
       condition = (eventCohort == 1) &
         (cleanWindowAssigned == 0) & (collapseEraPad > 7),
-      true = 1,
-      false = 0
+      true = "Has collapse era pad of greater than 7 in definition",
+      false = cleanWindowRule
     ),
     cleanWindowAssigned = dplyr::if_else(
-      condition = (eventCohort == 1) &
-        (cleanWindowAssigned == 0) & (collapseEraPad > 7),
+      condition = (cleanWindowAssigned == 0) & (collapseEraPad > 7),
       true = 1,
       false = cleanWindowAssigned
     )
   )
 allCohorts |>
-  dplyr::group_by(cleanWindowAssigned, eventCohort) |>
+  dplyr::group_by(cleanWindowRule, cleanWindowAssigned, eventCohort) |>
   dplyr::summarise(n = dplyr::n())
+
+# Choice: If exitDateOffset >= 7 then the cohort exit was probably thoughtfully constructed
+allCohorts |>
+  dplyr::filter(eventCohort == 1) |>
+  dplyr::filter(cleanWindowAssigned == 0) |> 
+  dplyr::group_by(exitDateOffSet) |>
+  dplyr::select(exitDateOffSet) |>
+  dplyr::summarise(n = dplyr::n()) |>
+  dplyr::arrange(exitDateOffSet)
+
+allCohorts <- allCohorts |>
+  dplyr::mutate(
+    cleanWindow = dplyr::if_else(
+      condition = (cleanWindowAssigned == 0) & (exitDateOffSet >= 7) & (is.na(exitPersistenceWindow)),
+      true = 0, # if exit date has been assigned in cohort definition ,then there is no need for clean window
+      false = cleanWindow
+    ),
+    cleanWindowRule = dplyr::if_else(
+      condition = (cleanWindowAssigned == 0) & (exitDateOffSet >= 7) & (is.na(exitPersistenceWindow)),
+      true = "Has an exit date strategy in the definition",
+      false = cleanWindowRule
+    ),
+    cleanWindowAssigned = dplyr::if_else(
+      condition = (cleanWindowAssigned == 0) & (exitDateOffSet >= 7) & (is.na(exitPersistenceWindow)),
+      true = 1,
+      false = cleanWindowAssigned
+    )
+  )
+allCohorts |>
+  dplyr::group_by(cleanWindowRule, cleanWindowAssigned, eventCohort) |>
+  dplyr::summarise(n = dplyr::n())
+
+
+ids <- allCohorts |> 
+  dplyr::arrange(cohortId) |> 
+  dplyr::filter(cleanWindowAssigned == 0) |> 
+  dplyr::pull(cohortId) |> 
+  sort()
 
 ### Heuristic based: assign clean window  ----
 ### (Decided by Azza and Gowtham)
 cleanWindow <- c()
-cleanWindow$cleanWindow9999 <- c(999,333,	351,	371,	379,	466,	470,	521,	591,	667,	713,	1071)
-cleanWindow$cleanWindow365 <- c(63, 215, 216, 219, 276, 277, 331, 341, 391, 393, 412, 691, 692, 693, 694, 720, 729, 730, 731, 732, 733, 738, 739, 742, 785, 1075, 1080, 1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088, 1089, 1090, 1091)
+cleanWindow$cleanWindow9999 <- c(466, 470, 521, 591, 667, 999, 1071)
+cleanWindow$cleanWindow365 <- c(63, 74, 215, 216, 276, 277, 412, 691, 692, 693, 694, 729, 732, 738, 742, 785, 1075, 1080, 1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088, 1089, 1090, 1091)
 cleanWindow$cleanWindow183 <- c(1078, 1079)
-cleanWindow$cleanWindow180 <- c(727,737,218)
-cleanWindow$cleanWindow90 <- c(90)
-cleanWindow$cleanWindow30 <- c(222, 267, 269, 362, 381, 382, 414, 416, 533, 690, 725, 726, 743, 783, 784, 794, 900, 938, 939, 979, 980, 1034, 1076, 1077)
-cleanWindow$cleanWindow14 <- c(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 54, 95, 191, 192, 193, 194, 278, 279, 280, 281, 282, 298, 300, 324, 328, 332, 340, 343, 354, 355, 356, 365)
+cleanWindow$cleanWindow180 <- c(218, 727, 737)
+cleanWindow$cleanWindow30 <- c(362, 533, 690, 726, 783, 784, 794, 938, 939, 979, 980, 1076, 1077)
 cleanWindow$cleanWindow1 <- c(24, 257, 325, 346, 347, 707)
 
 cleanWindowToAssign <-
@@ -243,20 +302,21 @@ cleanWindowToAssign <-
   dplyr::group_by(cohortId) |>
   dplyr::summarise(cleanWindow = max(cleanWindow)) |>
   dplyr::ungroup() |> 
-  dplyr::mutate(cleanWindowAssigned = 1)
+  dplyr::mutate(cleanWindowAssigned = 1,
+                cleanWindowRule = "Manual")
 
 allCohorts <-
   dplyr::bind_rows(
     allCohorts |>
       dplyr::filter(!cohortId %in% c(cleanWindowToAssign$cohortId)),
     allCohorts |>
-      dplyr::select(-cleanWindow, -cleanWindowAssigned) |>
+      dplyr::select(-cleanWindow, -cleanWindowAssigned, -cleanWindowRule) |>
       dplyr::inner_join(cleanWindowToAssign)
   )
 
 
 allCohorts |>
-  dplyr::group_by(cleanWindowAssigned, eventCohort) |>
+  dplyr::group_by(cleanWindowRule, cleanWindowAssigned, eventCohort) |>
   dplyr::summarise(n = dplyr::n())
 
 
