@@ -14,7 +14,7 @@ cohortsThatShouldBeRemovedBecauseTheySeemToCauseProblems <- c(23, 344)
 cohortsThatAreInteresting <- c(30, 33, 43, 61, 142, 235, 236, 240, 248, 251, 253, 329, 334, 372, 373, 375,
                                383, 389, 394, 395, 401, 404, 405, 411,
                                702, 703, 74, 705, 706, 710, 712, 715, 716, 717)
-cohortsThatAreDuplicates <- c()
+cohortsThatAreDuplicates <- c(1015, 747, 771, 772, 993, 997)
 cohortsThatWontAddValue <- c()
 
 fullPhenotypeLog <- fullPhenotypeLog |> 
